@@ -5,7 +5,7 @@ procrastinating it'll bother you more. give it your hopes and dreams and darkest
 
 ## setup
 - add all relevant information about you to a file called `my_prompt.txt`
-- add your groq api key to `.envexample`
+- add your groq api key to `.env`
 
 ## how to run 
 1. navigate to project dir
