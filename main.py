@@ -9,6 +9,7 @@ import subprocess
 import json
 from dotenv import load_dotenv
 import os
+import platform
 import tkinter as tk
 from threading import Thread
 from queue import Queue
@@ -21,7 +22,7 @@ message_queue = Queue()
 
 
 class NotificationManager:
-    """Manages notifications on the main thread (required by macOS)"""
+    """Manages notifications on the main thread (required for GUI on most platforms)"""
     
     def __init__(self):
         self.root = tk.Tk()
@@ -106,7 +107,10 @@ class NotificationManager:
         
         # Make sure it's on top and visible
         win.attributes('-topmost', True)
-        win.attributes('-alpha', 0.95)
+        try:
+            win.attributes('-alpha', 0.95)  # May not work on all Linux WMs
+        except tk.TclError:
+            pass
         win.lift()
         win.focus_force()
         
@@ -124,7 +128,7 @@ class NotificationManager:
         win.after(delay, lambda: self._fade_out(win))
     
     def _fade_out(self, win):
-        """Fade out animation"""
+        """Fade out animation (gracefully handles platforms without alpha support)"""
         try:
             alpha = win.attributes('-alpha')
             if alpha > 0.1:
@@ -132,6 +136,9 @@ class NotificationManager:
                 win.after(30, lambda: self._fade_out(win))
             else:
                 win.destroy()
+        except tk.TclError:
+            # Platform doesn't support alpha, just destroy
+            win.destroy()
         except:
             pass
     
@@ -143,6 +150,29 @@ class NotificationManager:
 def show_notification(message, is_productive=True):
     """Thread-safe way to queue a notification"""
     message_queue.put((message, is_productive))
+
+
+def play_sound(file_path):
+    """Cross-platform sound playback"""
+    system = platform.system()
+    try:
+        if system == "Darwin":
+            subprocess.run(["afplay", file_path], check=False)
+        elif system == "Linux":
+            # Try paplay (PulseAudio) first, fall back to aplay (ALSA)
+            result = subprocess.run(["which", "paplay"], capture_output=True)
+            if result.returncode == 0:
+                subprocess.run(["paplay", file_path], check=False)
+            else:
+                subprocess.run(["aplay", file_path], check=False)
+        elif system == "Windows":
+            # Use PowerShell for Windows
+            subprocess.run(
+                ["powershell", "-c", f"(New-Object Media.SoundPlayer '{file_path}').PlaySync()"],
+                check=False
+            )
+    except Exception as e:
+        print(f"[sound] Could not play sound: {e}")
 
 
 class ScreenshotResponse(BaseModel):
@@ -278,7 +308,7 @@ async def worker_loop():
         ss_desc = await describe_screenshot()
         is_productive = await decide_productivity(ss_desc)
         await analyse_screenshot(ss_desc, is_productive)
-        subprocess.run(["afplay", "bloop.mp3"], check=False)
+        play_sound("bloop.mp3")
         if is_productive:
             wait = random.randint(math.floor(wait * 1.2), math.ceil(wait * 1.5))
         else:
@@ -300,7 +330,7 @@ if __name__ == '__main__':
     # Start async worker in background thread
     worker_thread = Thread(target=run_async_worker, daemon=True)
     worker_thread.start()
-    
-    # Run tkinter on main thread (required by macOS)
+
+    # Run tkinter on main thread (required for GUI on most platforms)
     manager = NotificationManager()
     manager.run()
