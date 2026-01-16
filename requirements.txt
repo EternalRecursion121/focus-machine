@@ -1,0 +1,5 @@
+groq
+Pillow
+pydantic
+python-dotenv
+
